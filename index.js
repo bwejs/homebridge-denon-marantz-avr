@@ -11,6 +11,7 @@ module.exports = function (homebridge) {
   //fixInheritance(DenonAVRAccessory.InputSelect, Characteristic);
   inherits(DenonAVRAccessory.InputSelect, Characteristic);
   
+  inherits(DenonAVRAccessory.RelativeChange, Characteristic);
   homebridge.registerAccessory('homebridge-denon-marantz-avr', 'DenonMarantzAVR', DenonAVRAccessory);
 };
 
@@ -37,6 +38,7 @@ function DenonAVRAccessory(log, config) {
   this.minVolume = config['minVolume'] || 0;
   this.maxVolume = config['maxVolume'] || 100;
   this.doPolling = config['doPolling'] || false;
+  this.maxStep = config['maxStep'] || (this.maxValue - this.minValue);
   this.port = 80;
   
   this.pollingInterval = config['pollingInterval'] || "60";
@@ -51,6 +53,7 @@ function DenonAVRAccessory(log, config) {
   this.needSendVolume = false;
   this.needSendInput = false;
   
+  this.targetVolume = 50;
   this.setAttempt = 0;
   this.state = false;
   if (this.interval < 10 && this.interval > 100000) {
@@ -113,6 +116,15 @@ DenonAVRAccessory.InputSelect = function() {
   this.value = this.getDefaultValue();
 };
 
+DenonAVRAccessory.RelativeChange = function() {
+  Characteristic.call(this, 'Relative Change', 'FBDDB51D-E331-45E1-92FA-9DC1BFD64DB3');
+  this.setProps({
+    minValue: -100,
+    maxValue: 100,
+    format: Characteristic.Formats.FLOAT,
+    perms: [ Characteristic.Perms.WRITE]
+  });
+};
 
 DenonAVRAccessory.prototype.getPowerState = function (callback, context) {
   
@@ -202,6 +214,16 @@ DenonAVRAccessory.prototype.getInputSelect = function (callback) {
 };
 
 
+DenonAVRAccessory.prototype.setRelativeChange = function (change, callback) {
+    var target = this.targetVolume + change;
+    if (target > this.maxVolume) {
+      target = this.maxVolume;
+    }
+    if (target < this.minVolume) {
+      target = this.minVolume;
+    }
+    this.setVolume(target , callback);
+}
 
 DenonAVRAccessory.prototype.setInputSelect = function (stringValue, callback) {
   var valueToSend = stringValue;
@@ -355,6 +377,10 @@ DenonAVRAccessory.prototype.getServices = function () {
   this.speakerService.addCharacteristic(DenonAVRAccessory.InputSelect)
   .on('get', this.getInputSelect.bind(this))
   .on('set', this.setInputSelect.bind(this));
+  this.speakerService.addCharacteristic(DenonAVRAccessory.RelativeChange)
+  .setProps({minValue: (-1) * this.maxStep, maxValue: this.maxStep})
+  .on('set', this.setRelativeChange.bind(this));
+
   var list = [informationService, this.speakerService];
   
   if (this.includeSwitchServcie) {
