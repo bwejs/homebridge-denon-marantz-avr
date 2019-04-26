@@ -29,7 +29,7 @@ class DenonAvrPlatform {
         this.denon.on('close', () => {
             this.connected = false;
             this.log.debug(`lost connection to ${this.host}`);
-            if (this.attempts > 5) throw new Error(`Can't connect to AVR on ${this.host}`);
+           // if (this.attempts > 5) throw new Error(`Can't connect to AVR on ${this.host}`);
             setTimeout(() => {
                 this.connect();
             }, 2000);
