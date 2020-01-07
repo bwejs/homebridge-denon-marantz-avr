@@ -38,10 +38,10 @@ function DenonAVRAccessory(log, config) {
   this.maxVolume = config['maxVolume'] || 100;
   this.doPolling = config['doPolling'] || false;
   this.port = 80;
-  
+  this.targetVolume = this.defaultVolume;
   this.pollingInterval = config['pollingInterval'] || "60";
   this.pollingInterval = parseInt(this.pollingInterval)
-  
+  this.volumeControlType = config['volumeControlType'] || 2;
   this.includeSwitchServcie = false 
   
   this.denon = new Denon(this.ip);
@@ -259,6 +259,51 @@ DenonAVRAccessory.prototype.getVolume = function (callback) {
     }
   }.bind(this))
 };
+                       
+                       
+DenonAVRAccessory.prototype.setVolumeSelector = function (value, callback) {
+  var me = this;
+
+  var current = me.targetVolume;
+  if (value == 1) {
+     current = current + 5;
+  }
+  if (value == 0) {
+     current = current - 5;
+  }
+                          if (current > this.maxValue)  {
+                            current = this.maxValue;
+                          }
+                          if (current < this.minValue)  {
+                            current = this.minValue;
+                          }
+  this.targetVolume = current;
+
+  ping.checkHostIsReachable(me.ip, me.port, function (reachable) {
+    if (reachable) {
+      var volume = current;
+      me.denon.setVolume(volume, function (err) {
+        if (err) {
+          me.needSendVolume = true
+          me.log('set Volume error (will set later): ' + err);
+          callback(err);
+        } else {
+          me.speakerService.getCharacteristic(Characteristic.Volume).updateValue(current, null, "statuspoll");
+          me.needSendVolume = false
+          me.log('did set Volume to: ' + volume);
+          
+          callback(null);
+        }
+      }.bind(this))
+    } else {
+      me.needSendVolume = true;
+      me.log("Not Rechable At the Moment. But Will Set later.");
+      callback(new Error("Not Rechable At the Moment. But Will Set later."), null);
+    }
+  });
+};
+
+
 
 DenonAVRAccessory.prototype.setVolume = function (pVol, callback) {
   var volume = Math.round(pVol / 100 * 100);
@@ -334,9 +379,7 @@ DenonAVRAccessory.prototype.getServices = function () {
   .setCharacteristic(Characteristic.Manufacturer, this.type || 'Denon');
   
   
-  
-  
-  this.speakerService = new Service.Speaker(this.name);
+  this.speakerService = new Service.TelevisionSpeaker(this.name);
   
   this.speakerService.getCharacteristic(Characteristic.Mute)
   .on('get', this.getMuteState.bind(this))
@@ -347,6 +390,15 @@ DenonAVRAccessory.prototype.getServices = function () {
   .setProps({minValue: this.minVolume, maxValue: this.maxVolume})
   .on('set', this.setVolume.bind(this));
   
+   this.speakerService.getCharacteristic(Characteristic.VolumeSelector)
+  .on('set', this.setVolumeSelector.bind(this));
+
+                            
+  this.speakerService
+                            .setCharacteristic(Characteristic.VolumeControlType, this.volumeControlType)
+
+
+                            
   /*
   this.minVolume = config['minVolume'] || 0;
   this.maxVolume
